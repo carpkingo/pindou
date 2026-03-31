@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARD拼豆像素画工具（官方221色版）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        .pixel-image {
+            image-rendering: pixelated !important;
+            image-rendering: crisp-edges !important;
+            image-rendering: -moz-crisp-edges !important;
+            transform: translateZ(0);
+        }
+        #zoomContainer {
+            overflow: auto;
+            max-width: 100%;
+            max-height: 700px;
+            position: relative;
+            background: #f3f4f6;
+            padding: 10px;
+        }
+        #zoomWrapper {
+            transform-origin: 0 0;
+            transition: transform 0.1s;
+            cursor: grab;
+            display: inline-block;
+        }
+        #zoomWrapper:active {
+            cursor: grabbing;
+        }
+        :fullscreen #zoomContainer {
+            max-height: 100vh !important;
+            background: #fff !important;
+            padding: 20px;
+        }
+        /* 新增：优化色号文字样式，避免遮挡 */
+        .color-code-text {
+            font-size: 5px !important; /* 缩小字号 */
+            font-weight: normal !important; /* 取消粗体 */
+            letter-spacing: -0.5px; /* 缩小字间距 */
+            text-shadow: 0.5px 0.5px 1px rgba(0,0,0,0.2); /* 轻微阴影提升可读性 */
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+<header class="bg-white shadow sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-2">
+        <i class="fa fa-paint-brush text-indigo-600 text-2xl"></i>
+        <h1 class="text-xl font-bold">MARD拼豆像素画工具（官方221色版）</h1>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="space-y-6">
+            <div class="bg-white rounded-xl p-6 shadow">
+                <h2 class="text-lg font-semibold mb-3">上传图片</h2>
+                <div id="dropArea" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 transition-colors">
+                    <input type="file" id="fileInput" accept="image/png,image/jpg,image/jpeg,image/webp" class="hidden">
+                    <i class="fa fa-image text-3xl text-gray-400 mb-2"></i>
+                    <p class="text-sm text-gray-500">点击或拖拽图片（支持PNG/JPG/WEBP）</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow">
+                <h2 class="text-lg font-semibold mb-3">参数设置</h2>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm block mb-1">像素精度 <span id="pixelSizeText" class="text-indigo-600">64</span></label>
+                        <input type="range" id="pixelSize" min="16" max="128" value="64" step="8" class="w-full h-2 bg-gray-200 rounded accent-indigo-600">
+                    </div>
+                    <div>
+                        <label class="text-sm block mb-1">颜色匹配精度 <span id="colorToleranceText" class="text-indigo-600">30</span></label>
+                        <input type="range" id="colorTolerance" min="0" max="100" value="30" class="w-full h-2 bg-gray-200 rounded accent-indigo-600">
+                        <div class="text-xs text-gray-500 mt-1">数值越小，匹配越精准（0=严格匹配）</div>
+                    </div>
+                    <div class="flex gap-2 pt-1 flex-wrap">
+                        <button id="processBtn" class="flex-1 bg-indigo-600 text-white py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-opacity" disabled><i class="fa fa-magic mr-1"></i> 生成</button>
+                        <button id="exportBtn" class="flex-1 bg-emerald-600 text-white py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-opacity" disabled><i class="fa fa-download mr-1"></i> 导出</button>
+                        <button id="fullscreenBtn" class="flex-1 bg-orange-500 text-white py-2 rounded transition-bg hover:bg-orange-600"><i class="fa fa-expand mr-1"></i> 全屏</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow max-h-[400px] overflow-y-auto">
+                <h2 class="text-lg font-semibold mb-3">MARD颜色统计</h2>
+                <div id="colorStats" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white rounded-xl p-6 shadow">
+                <h2 class="text-lg font-semibold mb-3">原始图片</h2>
+                <div class="flex justify-center items-center bg-gray-50 rounded h-[260px]">
+                    <img id="originalImage" class="max-h-full max-w-full object-contain hidden" alt="原始图片">
+                    <p id="noOriginalImage" class="text-gray-400">未上传图片</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow">
+                <h2 class="text-lg font-semibold mb-3">MARD拼豆图纸（官方色号）</h2>
+                <div id="zoomContainer">
+                    <div id="zoomWrapper">
+                        <div id="pixelCanvasContainer" class="hidden relative">
+                            <canvas id="pixelCanvas" class="pixel-image" alt="拼豆图纸"></canvas>
+                            <div id="numberOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                        </div>
+                    </div>
+                </div>
+                <p id="noPixelImage" class="text-gray-400 text-center py-12">点击生成后显示官方色号图纸</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    // ======================
+    // MARD官方221色标准色卡（A/B/C/D/E/F/G/H/M全系列）
+    // 色号+十六进制色值 1:1匹配官方标准
+    // ======================
+    const MARD_COLORS = [
+        {code: 'A1', hex: '#FAF4C8'}, {code: 'A2', hex: '#FFFFD5'}, {code: 'A3', hex: '#FEFF8B'},
+        {code: 'A4', hex: '#FBED56'}, {code: 'A5', hex: '#F4D738'}, {code: 'A6', hex: '#FEAC4C'},
+        {code: 'A7', hex: '#FE8B4C'}, {code: 'A8', hex: '#FFDA45'}, {code: 'A9', hex: '#FF995B'},
+        {code: 'A10', hex: '#F77C31'}, {code: 'A11', hex: '#FFDD99'}, {code: 'A12', hex: '#FE9F72'},
+        {code: 'A13', hex: '#FFC365'}, {code: 'A14', hex: '#FD543D'}, {code: 'A15', hex: '#FFF365'},
+        {code: 'A16', hex: '#FFFF9F'}, {code: 'A17', hex: '#FFE36E'}, {code: 'A18', hex: '#FEBE7D'},
+        {code: 'A19', hex: '#FD7C72'}, {code: 'A20', hex: '#FFD568'}, {code: 'A21', hex: '#FFE395'},
+        {code: 'A22', hex: '#F4F57D'}, {code: 'A23', hex: '#E6C9B7'}, {code: 'A24', hex: '#F7F8A2'},
+        {code: 'A25', hex: '#FFD67D'}, {code: 'A26', hex: '#FFC830'},
+
+        {code: 'B1', hex: '#E6EE31'}, {code: 'B2', hex: '#63F347'}, {code: 'B3', hex: '#9EF780'},
+        {code: 'B4', hex: '#5DE035'}, {code: 'B5', hex: '#35E352'}, {code: 'B6', hex: '#65E2A6'},
+        {code: 'B7', hex: '#3DAF80'}, {code: 'B8', hex: '#1C9C4F'}, {code: 'B9', hex: '#27523A'},
+        {code: 'B10', hex: '#95D3C2'}, {code: 'B11', hex: '#5D722A'}, {code: 'B12', hex: '#166F41'},
+        {code: 'B13', hex: '#CAEB7B'}, {code: 'B14', hex: '#ADE946'}, {code: 'B15', hex: '#2E5132'},
+        {code: 'B16', hex: '#C5ED9C'}, {code: 'B17', hex: '#9BB13A'}, {code: 'B18', hex: '#E6EE49'},
+        {code: 'B19', hex: '#24B88C'}, {code: 'B20', hex: '#C2F0CC'}, {code: 'B21', hex: '#156A6B'},
+        {code: 'B22', hex: '#0B3C43'}, {code: 'B23', hex: '#303A21'}, {code: 'B24', hex: '#EEFCA5'},
+        {code: 'B25', hex: '#4E846D'}, {code: 'B26', hex: '#8D7A35'}, {code: 'B27', hex: '#CCE1AF'},
+        {code: 'B28', hex: '#9EE5B9'}, {code: 'B29', hex: '#C5E254'}, {code: 'B30', hex: '#E2FCB1'},
+        {code: 'B31', hex: '#B0E792'}, {code: 'B32', hex: '#9CAB5A'},
+
+        {code: 'C1', hex: '#E8FFE7'}, {code: 'C2', hex: '#A9F9FC'}, {code: 'C3', hex: '#A0E2FB'},
+        {code: 'C4', hex: '#41CCFF'}, {code: 'C5', hex: '#01ACEB'}, {code: 'C6', hex: '#50AAF0'},
+        {code: 'C7', hex: '#3677D2'}, {code: 'C8', hex: '#0F54C0'}, {code: 'C9', hex: '#324BCA'},
+        {code: 'C10', hex: '#3EBCE2'}, {code: 'C11', hex: '#28DDDE'}, {code: 'C12', hex: '#1C334D'},
+        {code: 'C13', hex: '#CDE8FF'}, {code: 'C14', hex: '#D5FDFF'}, {code: 'C15', hex: '#22C4C6'},
+        {code: 'C16', hex: '#1557A8'}, {code: 'C17', hex: '#04D1F6'}, {code: 'C18', hex: '#1D3344'},
+        {code: 'C19', hex: '#1887A2'}, {code: 'C20', hex: '#176DAF'}, {code: 'C21', hex: '#BEDDFF'},
+        {code: 'C22', hex: '#67B4BE'}, {code: 'C23', hex: '#C8E2FF'}, {code: 'C24', hex: '#7CC4FF'},
+        {code: 'C25', hex: '#A9E5E5'}, {code: 'C26', hex: '#3CAED8'}, {code: 'C27', hex: '#D3DFFA'},
+        {code: 'C28', hex: '#BBCFED'}, {code: 'C29', hex: '#34488E'},
+
+        {code: 'D1', hex: '#AEB4F2'}, {code: 'D2', hex: '#858EDD'}, {code: 'D3', hex: '#2F54AF'},
+        {code: 'D4', hex: '#182A84'}, {code: 'D5', hex: '#B843C5'}, {code: 'D6', hex: '#AC7BDE'},
+        {code: 'D7', hex: '#8854B3'}, {code: 'D8', hex: '#E2D3FF'}, {code: 'D9', hex: '#D5B9F8'},
+        {code: 'D10', hex: '#361851'}, {code: 'D11', hex: '#B9BAE1'}, {code: 'D12', hex: '#DE9AD4'},
+        {code: 'D13', hex: '#B90095'}, {code: 'D14', hex: '#8B279B'}, {code: 'D15', hex: '#2F1F90'},
+        {code: 'D16', hex: '#E3E1EE'}, {code: 'D17', hex: '#C4D4F6'}, {code: 'D18', hex: '#A45EC7'},
+        {code: 'D19', hex: '#D8C3D7'}, {code: 'D20', hex: '#9C32B2'}, {code: 'D21', hex: '#9A009B'},
+        {code: 'D22', hex: '#333A95'}, {code: 'D23', hex: '#EBDAFC'}, {code: 'D24', hex: '#7786E5'},
+        {code: 'D25', hex: '#494FC7'}, {code: 'D26', hex: '#DFC2F8'},
+
+        {code: 'E1', hex: '#FDD3CC'}, {code: 'E2', hex: '#FEC0DF'}, {code: 'E3', hex: '#FFB7E7'},
+        {code: 'E4', hex: '#E8649E'}, {code: 'E5', hex: '#F551A2'}, {code: 'E6', hex: '#F13D74'},
+        {code: 'E7', hex: '#C63478'}, {code: 'E8', hex: '#FFDBE9'}, {code: 'E9', hex: '#E970CC'},
+        {code: 'E10', hex: '#D33793'}, {code: 'E11', hex: '#FCDDD2'}, {code: 'E12', hex: '#F78FC3'},
+        {code: 'E13', hex: '#B5006D'}, {code: 'E14', hex: '#FFD1BA'}, {code: 'E15', hex: '#F8C7C9'},
+        {code: 'E16', hex: '#FFF3EB'}, {code: 'E17', hex: '#FFE2EA'}, {code: 'E18', hex: '#FFC7DB'},
+        {code: 'E19', hex: '#FEBAD5'}, {code: 'E20', hex: '#D8C7D1'}, {code: 'E21', hex: '#BD9DA1'},
+        {code: 'E22', hex: '#B785A1'}, {code: 'E23', hex: '#937A8D'}, {code: 'E24', hex: '#E1BCE8'},
+
+        {code: 'F1', hex: '#FD957B'}, {code: 'F2', hex: '#FC3D46'}, {code: 'F3', hex: '#F74941'},
+        {code: 'F4', hex: '#FC283C'}, {code: 'F5', hex: '#E7002F'}, {code: 'F6', hex: '#943630'},
+        {code: 'F7', hex: '#971937'}, {code: 'F8', hex: '#BC0028'}, {code: 'F9', hex: '#E2677A'},
+        {code: 'F10', hex: '#8A4526'}, {code: 'F11', hex: '#5A2121'}, {code: 'F12', hex: '#FD4E6A'},
+        {code: 'F13', hex: '#F35744'}, {code: 'F14', hex: '#FFA9AD'}, {code: 'F15', hex: '#D30022'},
+        {code: 'F16', hex: '#FEC2A6'}, {code: 'F17', hex: '#E69C79'}, {code: 'F18', hex: '#D37C46'},
+        {code: 'F19', hex: '#C1444A'}, {code: 'F20', hex: '#CD9391'}, {code: 'F21', hex: '#F7B4C6'},
+        {code: 'F22', hex: '#FDC0D0'}, {code: 'F23', hex: '#F67E66'}, {code: 'F24', hex: '#E698AA'},
+        {code: 'F25', hex: '#E54B4F'},
+
+        {code: 'G1', hex: '#FFE2CE'}, {code: 'G2', hex: '#FFC4AA'}, {code: 'G3', hex: '#F4C3A5'},
+        {code: 'G4', hex: '#E1B383'}, {code: 'G5', hex: '#EDB045'}, {code: 'G6', hex: '#E99C17'},
+        {code: 'G7', hex: '#9D5B3E'}, {code: 'G8', hex: '#753832'}, {code: 'G9', hex: '#E6B483'},
+        {code: 'G10', hex: '#D98C39'}, {code: 'G11', hex: '#E0C593'}, {code: 'G12', hex: '#FFC890'},
+        {code: 'G13', hex: '#B7714A'}, {code: 'G14', hex: '#8D614C'}, {code: 'G15', hex: '#FCF9E0'},
+        {code: 'G16', hex: '#F2D9BA'}, {code: 'G17', hex: '#78524B'}, {code: 'G18', hex: '#FFE4CC'},
+        {code: 'G19', hex: '#E07935'}, {code: 'G20', hex: '#A94023'}, {code: 'G21', hex: '#B88558'},
+
+        {code: 'H1', hex: '#FDFBFF'}, {code: 'H2', hex: '#FEFFFF'}, {code: 'H3', hex: '#B6B1BA'},
+        {code: 'H4', hex: '#89858C'}, {code: 'H5', hex: '#48464E'}, {code: 'H6', hex: '#2F2B2F'},
+        {code: 'H7', hex: '#000000'}, {code: 'H8', hex: '#E7D6DB'}, {code: 'H9', hex: '#EDEDED'},
+        {code: 'H10', hex: '#EEE9EA'}, {code: 'H11', hex: '#CECDD5'}, {code: 'H12', hex: '#FFF5ED'},
+        {code: 'H13', hex: '#F5ECD2'}, {code: 'H14', hex: '#CFD7D3'}, {code: 'H15', hex: '#98A6A8'},
+        {code: 'H16', hex: '#1D1414'}, {code: 'H17', hex: '#F1EDED'}, {code: 'H18', hex: '#FFFDF0'},
+        {code: 'H19', hex: '#F6EFE2'}, {code: 'H20', hex: '#949FA3'}, {code: 'H21', hex: '#FFFBE1'},
+        {code: 'H22', hex: '#CACAD4'}, {code: 'H23', hex: '#9A9D94'},
+
+        {code: 'M1', hex: '#BCC6B8'}, {code: 'M2', hex: '#8AA386'}, {code: 'M3', hex: '#697D80'},
+        {code: 'M4', hex: '#E3D2BC'}, {code: 'M5', hex: '#D0CCAA'}, {code: 'M6', hex: '#B0A782'},
+        {code: 'M7', hex: '#B4A497'}, {code: 'M8', hex: '#B38281'}, {code: 'M9', hex: '#A58767'},
+        {code: 'M10', hex: '#C5B2BC'}, {code: 'M11', hex: '#9F7594'}, {code: 'M12', hex: '#644749'},
+        {code: 'M13', hex: '#D19066'}, {code: 'M14', hex: '#C77362'}, {code: 'M15', hex: '#757D78'}
+    ].map(color => {
+        // 预转换十六进制到RGB，提升匹配效率
+        const rgb = hexToRgb(color.hex);
+        return { ...color, r: rgb.r, g: rgb.g, b: rgb.b };
+    });
+
+    // 全局元素获取
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const originalImage = document.getElementById('originalImage');
+    const pixelSize = document.getElementById('pixelSize');
+    const pixelSizeText = document.getElementById('pixelSizeText');
+    const colorTolerance = document.getElementById('colorTolerance');
+    const colorToleranceText = document.getElementById('colorToleranceText');
+    const processBtn = document.getElementById('processBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const pixelCanvas = document.getElementById('pixelCanvas');
+    const pixelCanvasContainer = document.getElementById('pixelCanvasContainer');
+    const noOriginalImage = document.getElementById('noOriginalImage');
+    const noPixelImage = document.getElementById('noPixelImage');
+    const colorStats = document.getElementById('colorStats');
+    const numberOverlay = document.getElementById('numberOverlay');
+    const zoomWrapper = document.getElementById('zoomWrapper');
+    const zoomContainer = document.getElementById('zoomContainer');
+    const ctx = pixelCanvas.getContext('2d');
+
+    // 全局变量
+    let originalImageFile = null;
+    let pixelData = [];
+    let colorMap = [];
+    let imgWidth = 0;
+    let imgHeight = 0;
+    let scale = 1;
+    let drag = false, startX = 0, startY = 0;
+    const displayScale = 10; // 画布显示缩放比例
+
+    // 初始化滑块文字
+    pixelSizeText.textContent = pixelSize.value;
+    colorToleranceText.textContent = colorTolerance.value;
+
+    // 滑块事件监听
+    pixelSize.addEventListener('input', () => {
+        pixelSizeText.textContent = pixelSize.value;
+    });
+    colorTolerance.addEventListener('input', () => {
+        colorToleranceText.textContent = colorTolerance.value;
+    });
+
+    // 全屏/退出全屏
+    fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            (zoomContainer.requestFullscreen || zoomContainer.webkitRequestFullscreen).call(zoomContainer);
+            fullscreenBtn.innerHTML = '<i class="fa fa-compress mr-1"></i> 退出';
+        } else {
+            (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+            fullscreenBtn.innerHTML = '<i class="fa fa-expand mr-1"></i> 全屏';
+        }
+    });
+
+    // 全屏状态变化监听
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+            fullscreenBtn.innerHTML = '<i class="fa fa-expand mr-1"></i> 全屏';
+        }
+    });
+
+    // 图片上传：点击/拖拽
+    dropArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFileUpload);
+    dropArea.addEventListener('dragover', e => {
+        e.preventDefault();
+        dropArea.classList.add('border-indigo-500', 'bg-indigo-50');
+    });
+    dropArea.addEventListener('dragleave', () => {
+        dropArea.classList.remove('border-indigo-500', 'bg-indigo-50');
+    });
+    dropArea.addEventListener('drop', e => {
+        e.preventDefault();
+        dropArea.classList.remove('border-indigo-500', 'bg-indigo-50');
+        fileInput.files = e.dataTransfer.files;
+        handleFileUpload();
+    });
+
+    // 处理文件上传
+    function handleFileUpload() {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        // 校验图片格式
+        const validTypes = ['image/png', 'image/jpg', 'image/jpeg', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            alert('请上传PNG/JPG/WEBP格式的图片！');
+            return;
+        }
+
+        originalImageFile = file;
+        const reader = new FileReader();
+        reader.onload = e => {
+            originalImage.src = '';
+            originalImage.onload = () => {
+                noOriginalImage.classList.add('hidden');
+                originalImage.classList.remove('hidden');
+                processBtn.disabled = false;
+                exportBtn.disabled = true;
+            };
+            originalImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // 生成MARD官方色号拼豆图纸
+    processBtn.addEventListener('click', async () => {
+        if (!originalImageFile) return;
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 匹配MARD色号中';
+
+        try {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = URL.createObjectURL(originalImageFile);
+            const loadPromise = new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                setTimeout(() => reject(new Error('图片加载超时')), 5000);
+            });
+            await loadPromise;
+
+            // 计算画布宽高（按比例适配像素精度）
+            const baseSize = parseInt(pixelSize.value);
+            const ratio = img.width / img.height || 1;
+            imgWidth = baseSize;
+            imgHeight = Math.round(baseSize / ratio);
+            imgWidth = Math.max(8, Math.min(200, imgWidth));
+            imgHeight = Math.max(8, Math.min(200, imgHeight));
+
+            // 初始化画布
+            pixelCanvas.width = imgWidth;
+            pixelCanvas.height = imgHeight;
+            ctx.clearRect(0, 0, imgWidth, imgHeight);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+
+            // 核心：匹配MARD官方色号
+            matchMardColors();
+            renderPixelImage();
+            renderColorNumbers(); // 渲染色号文字（已优化）
+            updateColorStats();
+
+            // 显示画布
+            pixelCanvas.style.width = `${imgWidth * displayScale}px`;
+            pixelCanvas.style.height = `${imgHeight * displayScale}px`;
+            pixelCanvasContainer.classList.remove('hidden');
+            noPixelImage.classList.add('hidden');
+            exportBtn.disabled = false;
+
+        } catch (err) {
+            console.error('生成失败：', err);
+            alert(`生成图纸失败：${err.message}，请更换图片重试！`);
+        } finally {
+            processBtn.disabled = false;
+            processBtn.innerHTML = '<i class="fa fa-magic mr-1"></i> 生成';
+        }
+    });
+
+    // ======================
+    // 核心算法：图片颜色 → 就近匹配MARD官方色号
+    // 基于RGB色差计算，匹配最接近的MARD官方颜色
+    // ======================
+    function matchMardColors() {
+        const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
+        const data = imageData.data;
+        const tol = 100 - parseInt(colorTolerance.value); // 反向适配滑块（值越小越精准）
+        const colorDict = new Map();
+        pixelData = [];
+
+        for (let y = 0; y < imgHeight; y++) {
+            const row = [];
+            for (let x = 0; x < imgWidth; x++) {
+                const i = (y * imgWidth + x) * 4;
+                let r = data[i] || 0, g = data[i+1] || 0, b = data[i+2] || 0, a = data[i+3] || 0;
+                if (a < 128) { row.push(null); continue; }
+
+                // 计算当前像素与所有MARD颜色的色差，取最接近的
+                let closestColor = null;
+                let minDistance = Infinity;
+                MARD_COLORS.forEach(mardColor => {
+                    // 计算RGB色差（欧几里得距离，加权提升视觉一致性）
+                    const rDiff = (r - mardColor.r) * 0.3;
+                    const gDiff = (g - mardColor.g) * 0.59;
+                    const bDiff = (b - mardColor.b) * 0.11;
+                    const distance = Math.sqrt(rDiff**2 + gDiff**2 + bDiff**2);
+
+                    // 匹配最接近的颜色
+                    if (distance < minDistance && distance <= tol) {
+                        minDistance = distance;
+                        closestColor = mardColor;
+                    }
+                });
+
+                // 兜底：如果无匹配（极特殊情况），取白色H2
+                if (!closestColor) closestColor = MARD_COLORS.find(c => c.code === 'H2');
+                const key = closestColor.code;
+
+                // 统计颜色数量
+                if (!colorDict.has(key)) {
+                    colorDict.set(key, {
+                        ...closestColor,
+                        count: 0
+                    });
+                }
+                const color = colorDict.get(key);
+                color.count++;
+                row.push(color);
+            }
+            pixelData.push(row);
+        }
+
+        // 按色号排序，方便查看
+        colorMap = Array.from(colorDict.values()).sort((a, b) => {
+            if (a.code[0] !== b.code[0]) {
+                return a.code[0].localeCompare(b.code[0]);
+            }
+            return parseInt(a.code.slice(1)) - parseInt(b.code.slice(1));
+        });
+    }
+
+    // 渲染MARD官方颜色像素画
+    function renderPixelImage() {
+        ctx.clearRect(0, 0, imgWidth, imgHeight);
+        ctx.imageSmoothingEnabled = false;
+        for (let y = 0; y < imgHeight; y++) {
+            for (let x = 0; x < imgWidth; x++) {
+                const c = pixelData[y][x];
+                if (!c) continue;
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+
+    // 渲染MARD官方色号数字覆盖层（核心修改：优化文字样式）
+    function renderColorNumbers() {
+        if (!colorMap.length) return;
+        numberOverlay.innerHTML = '';
+        numberOverlay.style.width = pixelCanvas.style.width;
+        numberOverlay.style.height = pixelCanvas.style.height;
+
+        for (let y = 0; y < imgHeight; y++) {
+            for (let x = 0; x < imgWidth; x++) {
+                const c = pixelData[y][x];
+                if (!c) continue;
+                // 根据背景亮度自动切换文字颜色（黑/白）
+                const brightness = (c.r * 0.299 + c.g * 0.587 + c.b * 0.114);
+                const textColor = brightness > 150 ? '#000000' : '#ffffff';
+
+                const elem = document.createElement('div');
+                elem.innerText = c.code;
+                // 关键修改：缩小字号、取消粗体、微调位置、添加轻微阴影提升可读性
+                elem.style.cssText = `
+                    position: absolute;
+                    width: ${displayScale}px; 
+                    height: ${displayScale}px;
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center;
+                    color: ${textColor}; 
+                    font-size: 4px; /* 原7px → 缩小至4px */
+                    font-weight: normal; /* 原bold → 取消粗体 */
+                    transform: scale(0.85); /* 轻微缩放进一步减小视觉占比 */
+                    left: ${x * displayScale}px;
+                    top: ${y * displayScale}px;
+                    text-shadow: 0.3px 0.3px 0.5px rgba(0,0,0,0.15); /* 轻微阴影提升可读性，不遮挡 */
+                `;
+                numberOverlay.appendChild(elem);
+            }
+        }
+    }
+
+    // 更新左侧MARD颜色统计（官方色号+数量）
+    function updateColorStats() {
+        colorStats.innerHTML = '';
+        if (!colorMap.length) {
+            colorStats.innerHTML = '<p class="text-gray-400 text-center py-2">无颜色数据</p>';
+            return;
+        }
+
+        let total = 0;
+        colorMap.forEach(c => {
+            total += c.count;
+            const div = document.createElement('div');
+            div.className = 'flex justify-between items-center p-2 bg-gray-50 rounded hover:bg-gray-100 transition-bg';
+            div.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 rounded border border-gray-200" style="background:${c.hex}"></div>
+                    <span>MARD 色号：<span class="font-medium">${c.code}</span></span>
+                </div>
+                <span class="text-gray-600">${c.count} 粒</span>
+            `;
+            colorStats.appendChild(div);
+        });
+
+        // 总计
+        const totalEl = document.createElement('div');
+        totalEl.className = 'mt-2 p-2 bg-indigo-100 rounded text-center font-medium text-indigo-700';
+        totalEl.textContent = `🧩 总计：${total} 粒拼豆（共${colorMap.length}种MARD官方色）`;
+        colorStats.appendChild(totalEl);
+    }
+
+    // 导出高清MARD图纸（自动适配列数+官方色号）
+    exportBtn.addEventListener('click', () => {
+        if (!colorMap.length || !imgWidth || !imgHeight) {
+            alert('无图纸数据，无法导出！');
+            return;
+        }
+
+        const cellSize = 60;    // 单个拼豆格子大小（高清）
+        const padding = 50;     // 画布内边距
+        const blockSize = 20;   // 颜色统计色块大小
+        const fontSize = 14;    // 颜色统计文字大小（适配字母+数字色号）
+        const lineHeight = 30;  // 颜色统计行高
+        const singleColorItemWidth = blockSize + 90 + 20; // 适配MARD色号（如A26、M15）
+
+        // 计算可用宽度+动态列数，修复极窄图计算异常
+        const canvasTotalWidth = Math.max(400, imgWidth * cellSize + padding * 2);
+        const canvasAvailableWidth = canvasTotalWidth - padding * 2;
+        let colCount = Math.floor(canvasAvailableWidth / singleColorItemWidth);
+        // 列数上下限+兜底
+        colCount = Math.max(4, Math.min(40, colCount));
+        colCount = Math.min(colCount, colorMap.length || 1);
+
+        const totalCount = colorMap.length;
+        const rowCount = Math.ceil(totalCount / colCount);
+        const statHeight = 20 + rowCount * lineHeight + 40;
+        const canvasTotalHeight = imgHeight * cellSize + statHeight + padding * 1.5;
+
+        // 创建高清导出画布
+        const cv = document.createElement('canvas');
+        const cx = cv.getContext('2d');
+        cv.width = canvasTotalWidth;
+        cv.height = canvasTotalHeight;
+        cx.fillStyle = '#ffffff';
+        cx.fillRect(0, 0, cv.width, cv.height);
+
+        // 绘制MARD官方颜色拼豆格子
+        cx.translate(padding, padding);
+        cx.imageSmoothingEnabled = false;
+        for (let y = 0; y < imgHeight; y++) {
+            for (let x = 0; x < imgWidth; x++) {
+                const c = pixelData[y][x];
+                if (!c) continue;
+                cx.fillStyle = c.hex;
+                cx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                // 绘制格子边框，提升清晰度
+                cx.strokeStyle = '#f0f0f0';
+                cx.lineWidth = 0.8;
+                cx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+            }
+        }
+
+        // 绘制MARD官方色号（A1/B2等）- 同步优化导出的文字样式
+        cx.textAlign = 'center';
+        cx.textBaseline = 'middle';
+        cx.font = `normal ${cellSize * 0.18}px Arial`; // 原bold → normal，字号比例缩小
+        for (let y = 0; y < imgHeight; y++) {
+            for (let x = 0; x < imgWidth; x++) {
+                const c = pixelData[y][x];
+                if (!c) continue;
+                const bright = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
+                cx.fillStyle = bright > 160 ? '#000000' : '#ffffff';
+                // 轻微描边提升可读性，不遮挡图像
+                cx.strokeStyle = 'rgba(0,0,0,0.1)';
+                cx.lineWidth = 0.5;
+                cx.strokeText(c.code, x * cellSize + cellSize/2, y * cellSize + cellSize/2);
+                cx.fillText(c.code, x * cellSize + cellSize/2, y * cellSize + cellSize/2);
+            }
+        }
+
+        // 绘制颜色统计区域（MARD色号+数量）
+        cx.resetTransform();
+        const baseY = imgHeight * cellSize + padding + 20;
+        const colWidth = canvasAvailableWidth / colCount;
+
+        cx.font = `${fontSize}px Arial`;
+        cx.textBaseline = 'middle';
+        cx.textAlign = 'left';
+        cx.fillStyle = '#333333';
+
+        // 绘制每个MARD颜色统计项
+        colorMap.forEach((c, i) => {
+            const col = i % colCount;
+            const row = Math.floor(i / colCount);
+            const x = padding + col * colWidth;
+            const y = baseY + row * lineHeight;
+
+            // 绘制官方颜色色块
+            cx.fillStyle = c.hex;
+            cx.fillRect(x, y - blockSize/2, blockSize, blockSize);
+            cx.strokeStyle = '#e0e0e0';
+            cx.strokeRect(x, y - blockSize/2, blockSize, blockSize);
+
+            // 绘制MARD色号+数量
+            cx.fillStyle = '#333333';
+            cx.fillText(`${c.code} (${c.count}粒)`, x + blockSize + 8, y);
+        });
+
+        // 绘制总计文字
+        const total = colorMap.reduce((s, c) => s + c.count, 0);
+        cx.font = 'bold 20px Arial';
+        cx.fillStyle = '#4f46e5';
+        cx.textAlign = 'center';
+        cx.fillText(`MARD官方拼豆图纸 | 总计：${total} 粒（${colorMap.length}种官方色）`, cv.width / 2, baseY + rowCount * lineHeight + 25);
+
+        // 下载高清图片
+        try {
+            const a = document.createElement('a');
+            a.download = `MARD官方拼豆图纸_${new Date().getTime()}.png`;
+            a.href = cv.toDataURL('image/png', 1.0); // 1.0最高画质
+            a.click();
+        } catch (err) {
+            console.error('导出失败：', err);
+            alert('导出图片失败，请尝试刷新页面重试！');
+        }
+    });
+
+    // 画布缩放（滚轮）
+    zoomContainer.addEventListener('wheel', e => {
+        e.preventDefault();
+        scale += e.deltaY > 0 ? -0.1 : 0.1;
+        scale = Math.max(0.2, Math.min(6, scale));
+        zoomWrapper.style.transform = `scale(${scale})`;
+    });
+
+    // 画布拖拽
+    zoomWrapper.addEventListener('mousedown', e => {
+        drag = true;
+        startX = e.clientX - zoomWrapper.offsetLeft;
+        startY = e.clientY - zoomWrapper.offsetTop;
+        zoomWrapper.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', e => {
+        if (!drag) return;
+        e.preventDefault();
+        const x = e.clientX - startX;
+        const y = e.clientY - startY;
+        zoomWrapper.style.transform = `scale(${scale}) translate(${x}px, ${y}px)`;
+    });
+    window.addEventListener('mouseup', () => {
+        drag = false;
+        zoomWrapper.style.cursor = 'grab';
+    });
+    window.addEventListener('mouseleave', () => {
+        drag = false;
+        zoomWrapper.style.cursor = 'grab';
+    });
+
+    // 工具函数：十六进制转RGB
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : { r: 255, g: 255, b: 255 };
+    }
+
+    // 初始化缩放
+    zoomWrapper.style.transform = 'scale(1)';
+</script>
+</body>
+</html>
